@@ -330,8 +330,33 @@ static astcenc_image* load_uncomp_file(
 ) {
 	astcenc_image *image = nullptr;
 
+	//Read raw data from stdin
+	if(strcmp(filename, "-") == 0) {
+		
+		//width and heiggt
+		uint32_t dims[2];
+		// read width and height
+		size_t bytes_read_1 = fread(dims, 1, sizeof(dims), stdin);
+		// if read is ok - go next
+		if(bytes_read_1 == sizeof(dims)) {
+			// pixels data size
+			uint32_t bytesToRead = dims[0] * dims[1] * 4;
+			// pixels data buffer
+			uint8_t* data = new uint8_t[bytesToRead];
+			// read pixels
+			size_t bytes_read_2 = fread(data, 1, bytesToRead, stdin);
+			// if read is ok - go next
+			if(bytes_read_2 == bytesToRead) {
+				//convers readed data to data astc structure
+				image = astc_img_from_unorm8x4_array(data, dims[0], dims[1], y_flip);
+			}
+			//release temporary data
+			delete[] data;
+		}
+
+	}
 	// For a 2D image just load the image directly
-	if (dim_z == 1)
+	else if (dim_z == 1)
 	{
 		image = load_ncimage(filename, y_flip, is_hdr, component_count);
 	}
@@ -1951,6 +1976,13 @@ astcenc_main(
 		return 1;
 	}
 
+	// If input file is "-" then file in .astc format writes to the stdout stream,
+	// and all other console output is turned off
+	bool out_is_stream = output_filename == "-";
+
+	// If output files is "-" then raw data arrives from stdin stream: width (uint32), height (uint32), width x height quands of uint8
+
+
 	// TODO: Handle RAII resources so they get freed when out of scope
 	// Load the compressed input file if needed
 
@@ -1975,12 +2007,12 @@ astcenc_main(
 				return 1;
 			}
 
-			if (is_srgb && (profile != ASTCENC_PRF_LDR_SRGB))
+			if (is_srgb && (profile != ASTCENC_PRF_LDR_SRGB) && !out_is_stream)
 			{
 				printf("WARNING: Input file is sRGB, but decompressing as linear\n");
 			}
 
-			if (!is_srgb && (profile == ASTCENC_PRF_LDR_SRGB))
+			if (!is_srgb && (profile == ASTCENC_PRF_LDR_SRGB) && !out_is_stream)
 			{
 				printf("WARNING: Input file is linear, but decompressing as sRGB\n");
 			}
@@ -2072,7 +2104,7 @@ astcenc_main(
 		bool is_null = output_filename == "/dev/null";
 #endif
 
-		if (!(is_null || ends_with(output_filename, ".astc") || ends_with(output_filename, ".ktx")))
+		if (!(is_null || out_is_stream || ends_with(output_filename, ".astc") || ends_with(output_filename, ".ktx")))
 		{
 			const char *eptr = strrchr(output_filename.c_str(), '.');
 			eptr = eptr ? eptr : "";
@@ -2131,7 +2163,7 @@ astcenc_main(
 			image_uncomp_in = image_pp;
 		}
 
-		if (!cli_config.silentmode)
+		if (!cli_config.silentmode && !out_is_stream)
 		{
 			printf("Source image\n");
 			printf("============\n\n");
@@ -2170,7 +2202,7 @@ astcenc_main(
 	double total_compression_time = 0.0;
 	if (operation & ASTCENC_STAGE_COMPRESS)
 	{
-		print_astcenc_config(cli_config, config);
+		if(!out_is_stream) print_astcenc_config(cli_config, config);
 
 		unsigned int blocks_x = (image_uncomp_in->dim_x + config.block_x - 1) / config.block_x;
 		unsigned int blocks_y = (image_uncomp_in->dim_y + config.block_y - 1) / config.block_y;
@@ -2191,7 +2223,7 @@ astcenc_main(
 		double start_compression_time = get_time();
 		for (unsigned int i = 0; i < cli_config.repeat_count; i++)
 		{
-			if (config.progress_callback)
+			if (config.progress_callback && !out_is_stream)
 			{
 				printf("Compression\n");
 				printf("===========\n");
@@ -2212,7 +2244,7 @@ astcenc_main(
 
 			astcenc_compress_reset(codec_context);
 
-			if (config.progress_callback)
+			if (config.progress_callback && !out_is_stream)
 			{
 				printf("\n\n");
 			}
@@ -2304,7 +2336,7 @@ astcenc_main(
 	// Store compressed image
 	if (operation & ASTCENC_STAGE_ST_COMP)
 	{
-		if (ends_with(output_filename, ".astc"))
+		if (out_is_stream || ends_with(output_filename, ".astc"))
 		{
 			error = store_cimage(image_comp, output_filename.c_str());
 			if (error)
@@ -2349,7 +2381,7 @@ astcenc_main(
 	}
 
 	// Store diagnostic images
-	if (cli_config.diagnostic_images && !is_null)
+	if (cli_config.diagnostic_images && !is_null && !out_is_stream)
 	{
 		print_diagnostic_images(codec_context, image_comp, output_filename);
 	}
@@ -2360,7 +2392,7 @@ astcenc_main(
 
 	delete[] image_comp.data;
 
-	if ((operation & ASTCENC_STAGE_COMPARE) || (!cli_config.silentmode))
+	if (!out_is_stream && ((operation & ASTCENC_STAGE_COMPARE) || (!cli_config.silentmode)))
 	{
 		double end_time = get_time();
 

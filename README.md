@@ -40,6 +40,15 @@ The encoder allows compression time and quality analysis by reporting the
 compression time, and the Peak Signal-to-Noise Ratio (PSNR) between the input
 image and the compressed output.
 
+Input data can be provided as file or as input stream ("-" instead input file name).
+If streamed data is provided it must be in raw format:
+`width` and `height` (unsinged 32-bit integer values each),
+`pixels data` (four 8-bit unsinged integer values for each pixel).
+Supports only LDR, 1-plane image.
+
+Output data can be placed to file or to output stream ("-" instead output file name).
+For stream output result always is in ASTC file format.
+
 ## ASTC format support
 
 The `astcenc` compressor supports generation of images for all three profiles

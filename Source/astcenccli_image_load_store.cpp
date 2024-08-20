@@ -2550,14 +2550,23 @@ int store_cimage(
 	hdr.dim_z[1] = (img.dim_z >>  8) & 0xFF;
 	hdr.dim_z[2] = (img.dim_z >> 16) & 0xFF;
 
-	std::ofstream file(filename, std::ios::out | std::ios::binary);
-	if (!file)
-	{
-		print_error("ERROR: File open failed '%s'\n", filename);
-		return 1;
+	if(strcmp(filename, "-") == 0) { // write to stdout stream
+
+		fwrite(&hdr    , 1, sizeof(astc_header), stdout);
+		fwrite(img.data, 1, img.data_len       , stdout);
+
+	} else { // write to file
+
+		std::ofstream file(filename, std::ios::out | std::ios::binary);
+		if (!file)
+		{
+			print_error("ERROR: File open failed '%s'\n", filename);
+			return 1;
+		}
+
+		file.write(reinterpret_cast<char*>(&hdr), sizeof(astc_header));
+		file.write(reinterpret_cast<char*>(img.data), img.data_len);
 	}
 
-	file.write(reinterpret_cast<char*>(&hdr), sizeof(astc_header));
-	file.write(reinterpret_cast<char*>(img.data), img.data_len);
 	return 0;
 }
